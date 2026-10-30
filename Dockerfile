@@ -7,6 +7,7 @@ RUN npm install -g bun
 # Install all dependencies (including devDeps for build)
 COPY package.json bun.lock ./
 COPY patches/ ./patches/
+COPY packages/ ./packages/
 RUN bun install --ignore-scripts
 
 # Copy source
@@ -33,6 +34,7 @@ COPY --from=builder /app/dist-server ./dist-server
 COPY --from=builder /app/out/renderer ./out/renderer
 COPY package.json bun.lock ./
 COPY patches/ ./patches/
+COPY packages/ ./packages/
 RUN bun install --production --ignore-scripts
 
 ENV PORT=3000
