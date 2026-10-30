@@ -1,49 +1,27 @@
-FROM node:20-slim AS builder
+FROM oven/bun:1
 WORKDIR /app
 
-# Install bun
-RUN npm install -g bun
-
-# Install all dependencies (including devDeps for build)
-COPY package.json bun.lock ./
-COPY patches/ ./patches/
-COPY packages/ ./packages/
-RUN bun install --ignore-scripts
-
-# Copy source
-COPY . .
-
-# Build renderer (no Electron needed) and server bundle
-RUN bun run build:renderer:web
-RUN node scripts/build-server.mjs
-
-# ---- Runtime image ----
-FROM oven/bun:latest AS runtime
-WORKDIR /app
-
-# officecli (the Office preview component, auto-installed at runtime by the
-# backend) is a .NET binary that aborts on startup without ICU, and Debian
-# base images don't ship it. libicu-dev is version-agnostic so it keeps
-# resolving the right libicuNN when the base image bumps Debian releases.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libicu-dev \
+    && apt-get install -y --no-install-recommends libicu-dev ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy only build artifacts and production deps
-COPY --from=builder /app/dist-server ./dist-server
-COPY --from=builder /app/out/renderer ./out/renderer
-COPY package.json bun.lock ./
-COPY patches/ ./patches/
-COPY packages/ ./packages/
-RUN bun install --production --ignore-scripts
+COPY . .
+RUN bun install --ignore-scripts
 
-ENV PORT=3000
+# Renderer build (same command as the repo's "package" script, no Electron launch)
+RUN bun run package
+
+# Fetch the pinned aioncore backend binary from GitHub releases
+RUN bun scripts/prepareAioncore.js
+
 ENV NODE_ENV=production
-ENV ALLOW_REMOTE=true
-ENV DATA_DIR=/data
+ENV AIONUI_HOST=0.0.0.0
+ENV AIONUI_ALLOW_REMOTE=1
+ENV AIONUI_PORT=3000
+ENV AIONUI_DATA_DIR=/data
+ENV AIONUI_OPEN_BROWSER=0
 
-# SQLite data volume — mount with: -v $(pwd)/data:/data
 VOLUME ["/data"]
 EXPOSE 3000
 
-CMD ["bun", "dist-server/server.mjs"]
+CMD ["bun", "scripts/webui.ts"]
